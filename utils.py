@@ -1,8 +1,16 @@
+import os
+import time
+
+import cv2
 import numpy as np
 import keras.backend as K
 from keras.layers import Layer
+from keras.callbacks import Callback
 from matplotlib import pyplot as plt
 from keras.models import load_model, Model
+
+from data_generator import DataSet, one_hot_tensor_to_label, show_grid_images, labels_to_images
+
 
 def create_inference_model(name):
     model = load_model(name)
@@ -45,11 +53,11 @@ def plot_confusion_matrix(conf_mtx, classes,
     This function prints and plots the confusion matrix.
     """
     if not title:
-            title = 'Normalized confusion matrix'
+        title = 'Normalized confusion matrix'
 
     print(conf_mtx)
 
-    fig, ax = plt.subplots(figsize=(20,20))
+    fig, ax = plt.subplots(figsize=(20, 20))
     im = ax.imshow(conf_mtx, interpolation='nearest', cmap=cmap)
     ax.figure.colorbar(im, ax=ax)
     # We want to show all ticks...
@@ -77,5 +85,34 @@ def plot_confusion_matrix(conf_mtx, classes,
     return fig, ax
 
 
-if __name__ == '__main__':
-    create_inference_model('model0.h5')
+class PlotOnEpochEnd(Callback):
+
+    def __init__(self, save_images: bool=True):
+        val_images_dir = os.path.join("leftImg8bit", "val")
+        val_labels_dir = os.path.join("gtFine", "val")
+
+        self.n_classes = 34
+        self.image_size = (640, 320)
+
+        val_dataset = DataSet(batch_size=3, images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=self.n_classes)
+        val_generator = val_dataset.generate_data(image_size=self.image_size, shuffle=True)
+
+        self.x, y = next(val_generator)
+        self.y = one_hot_tensor_to_label(y)
+        self.y_image = labels_to_images(self.x, self.y, self.n_classes)
+
+        self.save_images = save_images
+        # folder to save images to
+        if save_images:
+            self.images_folder = './training_progress_images/{}/'.format(time.strftime('%Y%m%d-%H%M%S'))
+            os.makedirs(self.images_folder)
+
+    def on_epoch_end(self, epoch, logs=None):
+        res = self.model.predict(self.x)
+        res = one_hot_tensor_to_label(res)
+        res_resized = [cv2.resize(res_label, self.image_size, interpolation=cv2.INTER_NEAREST) for
+                       res_label in res]
+
+        fig = show_grid_images([self.x, self.y_image, labels_to_images(self.x, res_resized, self.n_classes)])
+        if self.save_images:
+            fig.savefig(self.images_folder+str(epoch)+'.png', bbox_inches='tight', pad_inches=0)

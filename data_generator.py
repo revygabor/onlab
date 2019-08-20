@@ -9,7 +9,7 @@ import numpy as np
 from keras.preprocessing import utils as keras_utils
 
 
-def output_tensor_to_label(output_label):
+def one_hot_tensor_to_label(output_label):
     """
     Converts output tensor to labels format
     :param output_label: output tensor from NN
@@ -37,6 +37,7 @@ def show_grid_images(images: List[List[np.ndarray]]):
     """
     Plots the images and the images with their labels.
     :param images: matrix of images (list of list of images)
+    :return fig: current figure
     """
     n_cols = len(images)
     n_samples = len(images[0])
@@ -45,7 +46,9 @@ def show_grid_images(images: List[List[np.ndarray]]):
     for i in range(n_samples):
         for j in range(n_cols):
             axes[i, j].imshow(images[j][i])
+    fig = plt.gcf()
     plt.show()
+    return fig
 
 
 class DataSet:
@@ -126,7 +129,7 @@ class DataSet:
         images = [plt.imread(self.images_list[i]) for i in indices]
         labels = [plt.imread(self.labels_list[i]) * 255. for i in indices]
 
-        show_grid_images([images, labels_to_images(images, labels, n_classes)])
+        show_grid_images([images, labels_to_images(images, labels, self.n_classes)])
 
 
 if __name__ == '__main__':
@@ -140,7 +143,7 @@ if __name__ == '__main__':
     dataset.show_random_samples(2)
 
     x, y = next(train_generator)
-    labeled_image = labels_to_images(x, output_tensor_to_label(y), n_classes)
+    labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
     show_grid_images([x, labeled_image])
     print(x.shape, x[0])
     # print(y.shape, y[0])

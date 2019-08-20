@@ -19,8 +19,8 @@ if __name__ == '__main__':
     n_classes = 34
     image_size = (640, 320)
 
-    val_dataset = DataSet(images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=n_classes)
-    val_generator = val_dataset.generate_data(batch_size=2, image_size=image_size, shuffle=True)
+    val_dataset = DataSet(images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=n_classes, batch_size=2)
+    val_generator = val_dataset.generate_data(image_size=image_size, shuffle=True)
 
     next(val_generator)  # self.n_batches is created
 
