@@ -193,3 +193,8 @@ def atrous_spatial_pyramid_pooling(input_layer, global_image_pooling_upsampling_
     # output_layer = Concatenate()([b_aspp_0, b_aspp_1, b_aspp_2, b_aspp_3, b_image_pooling])
 
     return output_layer
+
+
+if __name__ == '__main__':
+    model = create_network(input_resolution=(416, 416, 3), n_classes=34)
+    model.summary()
