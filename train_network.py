@@ -8,7 +8,8 @@ from keras.optimizers import Adam, RMSprop, SGD
 
 from data_generator import DataSet
 # from own_model import create_network
-from deep_lab_v3_plus import create_network
+# from deep_lab_v3_plus import create_network
+from HRNet import create_network
 from utils import PlotOnEpochEnd
 
 if __name__ == '__main__':
@@ -19,11 +20,12 @@ if __name__ == '__main__':
     TRAIN_FROM_START = True
 
     train_images_dir = os.path.join("leftImg8bit", "train")
-    # train_labels_dir = os.path.join("gtCoarse", "train")
-    train_labels_dir = os.path.join("gtFine", "train")
+    train_labels_dir = os.path.join("gtCoarse", "train")
+    # train_labels_dir = os.path.join("gtFine", "train")
 
     val_images_dir = os.path.join("leftImg8bit", "val")
-    val_labels_dir = os.path.join("gtFine", "val")
+    val_labels_dir = os.path.join("gtCoarse", "val")
+    # val_labels_dir = os.path.join("gtFine", "val")
     n_classes = 34
     image_size = (640, 320)
 
@@ -54,4 +56,6 @@ if __name__ == '__main__':
                         epochs=200, validation_data=val_generator,
                         validation_steps=val_dataset.n_batches,
                         # validation_steps=120,
-                        callbacks=[checkpointer, tb, reduce_lr_on_plateau, plotter, early_stopping])
+                        callbacks=[checkpointer, tb, reduce_lr_on_plateau,
+                                   plotter,
+                                   early_stopping])

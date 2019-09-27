@@ -207,8 +207,10 @@ def create_classificator(input_layers: List[tf.Tensor], n_classes: int):
     return x
 
 
-def create_network(n_classes):
-    input = Input(shape=(416, 416, 3))
+def create_network(input_resolution=(None, None, 3), n_classes=34):
+    # input = Input(shape=(*input_resolution, 3))
+    input = Input(shape=(None, None, 3))
+
     x = Conv2D(filters=64, kernel_size=3, strides=2)(input)
     x = BN()(x)
     x = Conv2D(filters=64, kernel_size=3, strides=2)(x)
@@ -241,7 +243,7 @@ if __name__ == '__main__':
     config.gpu_options.allow_growth = True
     session = tf.Session(config=config)
 
-    model = create_network(34)
+    model = create_network(input_resolution=(416,416,3), n_classes=34)
     model.summary()
 
     # import os

@@ -61,6 +61,7 @@ class DataSet:
         :param n_classes: number of classes in the dataset
         :param batch_size: batch size
         """
+        self.cache = {}
         self.images_dir = images_dir
         self.labels_dir = labels_dir
         self.n_classes = n_classes
@@ -81,10 +82,12 @@ class DataSet:
         self.n_batches = self.data_size // batch_size
         self.batch_size = batch_size
 
-    def generate_data(self, image_size: Tuple[int, int] = (600, 300), shuffle: bool = True):
+    def generate_data(self, image_size: Tuple[int, int] = (600, 300), shuffle: bool = True,
+                      enable_caching: bool = False):
         """
         Generator for the training, generates (x, y) pair
         -------------------------------------------------
+        :param enable_caching: whether or not you want to enable to cache the input+output images
         :param image_size: size to resize the image to
         :param shuffle: whether to shuffle dataset after one epoch
         :return: (x, y) where x: batch of input images, y: batch of one hot encoded pixel-level labels
@@ -100,16 +103,39 @@ class DataSet:
             for batch_index in range(self.n_batches):
                 start_index = batch_index * self.batch_size
 
-                images_batch = self.images_list[start_index: start_index + self.batch_size]
-                images_batch = [cv2.resize(
-                    plt.imread(img), image_size)
-                    for img in images_batch]
+                images_batch_path = self.images_list[start_index: start_index + self.batch_size]
 
-                labels_batch = self.labels_list[start_index: start_index + self.batch_size]
-                # by multiplying by 255 we get the id
-                labels_batch = [cv2.resize(
-                    (plt.imread(img) * 255).astype(int), image_size, interpolation=cv2.INTER_NEAREST)
-                    for img in labels_batch]
+                if enable_caching:
+                    images_batch = []
+                    for img_path in images_batch_path:
+                        if img_path in self.cache:
+                            images_batch.append(self.cache[img_path])
+                        else:
+                            img = cv2.resize(plt.imread(img_path), image_size)
+                            self.cache[img_path] = img
+                            images_batch.append(img)
+                else:
+                    images_batch = [cv2.resize(plt.imread(img_path), image_size)
+                                    for img_path in images_batch_path]
+
+                labels_batch_path = self.labels_list[start_index: start_index + self.batch_size]
+
+                if enable_caching:
+                    labels_batch = []
+                    for label_path in labels_batch_path:
+                        if label_path in self.cache:
+                            labels_batch.append(self.cache[label_path])
+                        else:
+                            label = cv2.resize((plt.imread(label_path) * 255).astype(int),
+                                               image_size, interpolation=cv2.INTER_NEAREST)
+                            self.cache[label_path] = label
+                            labels_batch.append(label)
+                    # by multiplying by 255 we get the id
+
+                else:
+                    labels_batch = [cv2.resize(
+                        (plt.imread(img) * 255).astype(int), image_size, interpolation=cv2.INTER_NEAREST)
+                        for img in labels_batch_path]
 
                 labels_tensor_batch = [keras_utils.to_categorical(label, self.n_classes) for label in labels_batch]
 
@@ -138,12 +164,19 @@ if __name__ == '__main__':
     n_classes = 34
 
     dataset = DataSet(images_dir=images_dir, labels_dir=labels_dir, n_classes=n_classes, batch_size=3)
-    train_generator = dataset.generate_data(image_size=(416, 416), shuffle=True)
-
-    dataset.show_random_samples(2)
-
-    x, y = next(train_generator)
-    labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
-    show_grid_images([x, labeled_image])
-    print(x.shape, x[0])
-    # print(y.shape, y[0])
+    train_generator = dataset.generate_data(image_size=(640, 320), shuffle=True, enable_caching=True)
+    #
+    # dataset.show_random_samples(2)
+    #
+    # x, y = next(train_generator)
+    # labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
+    # show_grid_images([x, labeled_image])
+    # print(x.shape, x[0])
+    # # print(y.shape, y[0])
+    import time
+    start = time.time()
+    for i in range(1500):
+        next(train_generator)
+        end = time.time()
+        print(end-start, i, sep='\t')
+        start = end
