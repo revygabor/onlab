@@ -10,13 +10,13 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 
-val_images_dir = os.path.join("leftImg8bit", "val")
-val_labels_dir = os.path.join("gtFine", "val")
+val_images_dir = os.path.join("leftImg8bit", "val", "*", "*_leftImg8bit.png")
+val_labels_dir = os.path.join("gtFine", "val", "*", "*_labelIds.png")
 
-n_classes = 34
+n_classes = 20
 image_size = (640, 320)
 
-val_dataset = DataSet(batch_size=3, images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=n_classes)
+val_dataset = DataSet(batch_size=3, images_path=val_images_dir, labels_path=val_labels_dir, n_classes=n_classes)
 val_generator = val_dataset.generate_data(image_size=image_size, shuffle=True)
 
 model = create_inference_model('model.h5')

@@ -1,4 +1,4 @@
-import os
+import glob
 import progressbar
 
 import numpy as np
@@ -9,22 +9,22 @@ from keras.preprocessing import utils as keras_utils
 from data_generator import DataSet
 from utils import create_inference_model, plot_confusion_matrix
 
-if __name__ == '__main__':
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    session = tf.Session(config=config)
+from config import *
 
-    val_images_dir = os.path.join("leftImg8bit", "val")
-    val_labels_dir = os.path.join("gtCoarse", "val")
-    n_classes = 34
+
+def eval_network(model_name, dataset_name, images_dir, labels_dir):
+    labels = ['road', 'sidewalk', 'building/wall/fence',
+              'pole', 'traffic light', 'traffic sign',
+              'vegetation', 'sky', 'person', 'car', 'truck',
+              'bus', 'train', 'motorcycle', 'bicycle', 'other']
+    n_classes = len(labels)
     image_size = (640, 320)
+    # image_size = (1280, 704)
 
-    val_dataset = DataSet(images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=n_classes, batch_size=2)
-    val_generator = val_dataset.generate_data(image_size=image_size, shuffle=True)
+    dataset = DataSet(images_path=images_dir, labels_path=labels_dir, n_classes=n_classes, batch_size=2)
+    generator = dataset.generate_data(image_size=image_size, shuffle=False)
 
-    next(val_generator)  # self.n_batches is created
-
-    model = create_inference_model('model.h5')
+    model = create_inference_model(model_name)
 
     progress = progressbar.ProgressBar(widgets=[progressbar.Bar('=', '[', ']'), ' ',
                                                 progressbar.Percentage(), ' ',
@@ -35,8 +35,8 @@ if __name__ == '__main__':
 
     conf_matrix = np.zeros((n_classes, n_classes))
 
-    for i in progress(range(val_dataset.n_batches)):
-        x, y_true_one_hot = next(val_generator)
+    for i in progress(range(dataset.n_batches)):
+        x, y_true_one_hot = next(generator)
         y_pred = model.predict(x)
 
         # computing iou
@@ -60,15 +60,27 @@ if __name__ == '__main__':
 
     iou = intersection_pixels / union_pixels
     conf_matrix_row_sum = np.sum(conf_matrix, axis=-1)
-    conf_matrix_normalized = conf_matrix/np.expand_dims(conf_matrix_row_sum, axis=-1)
+    conf_matrix_normalized = conf_matrix / np.expand_dims(conf_matrix_row_sum, axis=-1)
 
-    labels = ['unlabeled', 'ego vehicle', 'rectification border', 'out of roi', 'static', 'dynamic', 'ground', 'road',
-              'sidewalk', 'parking', 'rail track', 'building', 'wall', 'fence', 'guard rail', 'bridge', 'tunnel',
-              'pole', 'polegroup', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider',
-              'car', 'truck', 'bus', 'caravan', 'trailer', 'train', 'motorcycle', 'bicycle']
-    for i, l in enumerate(labels):
-        print('{:20s} - {:3.2f}'.format(l, iou[i]))
+    with open('res/iou_{}_{}.csv'.format(model_name, dataset_name), 'a') as iou_file:
+        for i, l in enumerate(labels):
+            print('{}\t{:3.2f}'.format(l, iou[i]), file=iou_file)
 
     fig, ax = plot_confusion_matrix(conf_matrix_normalized, labels)
-    fig.show()
-    plt.show()
+    # fig.show()
+    # plt.show()
+    fig.savefig('res/conf_mtx_{}_{}.svg'.format(model_name, dataset_name), pad_inches=0, format='svg')
+
+    np.save('res/conf_mtx_{}_{}.npy'.format(model_name, dataset_name), conf_matrix_normalized)
+
+
+if __name__ == '__main__':
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    session = tf.Session(config=config)
+
+    models = glob.glob('*.h5')
+
+    for model in models:
+        eval_network(model, BDD100K_VAL, BDD100K_VAL_IMAGES, BDD100K_VAL_LABELS)
+        eval_network(model, CITYSCAPES_VAL_FINE, CITYSCAPES_VAL_IMAGES, CITYSCAPES_VAL_FINE_LABELS)

@@ -7,8 +7,8 @@ import keras.backend as K
 
 
 def create_network(input_resolution, n_classes=34):
-    # input_layer = Input(shape=(*input_resolution, 3))
-    input_layer = Input(shape=(None, None, 3))
+    input_layer = Input(shape=(*input_resolution, 3))
+    # input_layer = Input(shape=(None, None, 3))
 
     # entry flow
     x = _Conv2D(input_layer, filters=32, kernel_size=3, stride=2,
@@ -39,8 +39,13 @@ def create_network(input_resolution, n_classes=34):
                        name='xf_x_block_2', residual_type='none')
 
     # atrous spatial pyramid pooling
-    global_image_pooling_upsampling_factor = tuple(i / 16 for i in input_resolution)
-    x = atrous_spatial_pyramid_pooling(x, global_image_pooling_upsampling_factor=global_image_pooling_upsampling_factor)
+    if None in input_resolution: # input resolution not defined --> no global pooling (fully convolutional)
+        x = atrous_spatial_pyramid_pooling(x)
+
+    else: # using global pooling
+        global_image_pooling_upsampling_factor = tuple(i / 16 for i in input_resolution)
+        x = atrous_spatial_pyramid_pooling(x, global_image_pooling_upsampling_factor=global_image_pooling_upsampling_factor)
+
 
     # 1x1 conv after aspp
     x = _Conv2D(x, filters=256, kernel_size=1, name='1x1conv_after_aspp')
@@ -77,7 +82,7 @@ def create_network(input_resolution, n_classes=34):
     x = UpSampling2D(size=4, interpolation='bilinear')(x)
 
     # activation
-    x = Activation('sigmoid')(x)
+    x = Activation('softmax')(x)
 
     model = Model(inputs=input_layer, outputs=x)
 
@@ -147,7 +152,7 @@ def xception_block(input_layer, filter, last_stride, last_rate, name,
     return x
 
 
-def atrous_spatial_pyramid_pooling(input_layer, global_image_pooling_upsampling_factor):
+def atrous_spatial_pyramid_pooling(input_layer, global_image_pooling_upsampling_factor=None):
     # branch: 1x1 conv
     b_aspp_0 = _Conv2D(input_layer, filters=256, kernel_size=1,
                        name='aspp_0_conv', bn_epsilon=1e-5)
@@ -179,22 +184,26 @@ def atrous_spatial_pyramid_pooling(input_layer, global_image_pooling_upsampling_
     b_aspp_3 = BatchNormalization(name='pyramid_3x3sepconv_bn', epsilon=1e-5)(b_aspp_3)
     b_aspp_3 = ReLU()(b_aspp_3)
 
-    # branch: image pooling
-    # b_image_pooling = GlobalAveragePooling2D(name='pyramid_img_pool')(input_layer)
-    # b_image_pooling = Lambda(lambda x: K.expand_dims(K.expand_dims(x, 1), 1))(
-    #     b_image_pooling)  # (batch size x channels)->(batch size x 1 x 1 x channels)
-    # b_image_pooling = Conv2D(filters=256, kernel_size=1, padding='same',
-    #                          use_bias=False, name='pyramid_img_pool_conv')(b_image_pooling)
-    # b_image_pooling = BatchNormalization(name='pyramid_img_pool_conv_bn')(b_image_pooling)
-    # b_image_pooling = ReLU()(b_image_pooling)
-    # b_image_pooling = UpSampling2D(global_image_pooling_upsampling_factor, interpolation='bilinear')(b_image_pooling)
+    if global_image_pooling_upsampling_factor is None:
+        output_layer = Concatenate()([b_aspp_0, b_aspp_1, b_aspp_2, b_aspp_3])
 
-    output_layer = Concatenate()([b_aspp_0, b_aspp_1, b_aspp_2, b_aspp_3])
-    # output_layer = Concatenate()([b_aspp_0, b_aspp_1, b_aspp_2, b_aspp_3, b_image_pooling])
+    else:
+        # branch: global image pooling
+        b_image_pooling = GlobalAveragePooling2D(name='pyramid_img_pool')(input_layer)
+        b_image_pooling = Lambda(lambda x: K.expand_dims(K.expand_dims(x, 1), 1))(
+            b_image_pooling)  # (batch size x channels)->(batch size x 1 x 1 x channels)
+        b_image_pooling = Conv2D(filters=256, kernel_size=1, padding='same',
+                                 use_bias=False, name='pyramid_img_pool_conv')(b_image_pooling)
+        b_image_pooling = BatchNormalization(name='pyramid_img_pool_conv_bn')(b_image_pooling)
+        b_image_pooling = ReLU()(b_image_pooling)
+        b_image_pooling = UpSampling2D(global_image_pooling_upsampling_factor, interpolation='bilinear')(b_image_pooling)
+
+        output_layer = Concatenate()([b_aspp_0, b_aspp_1, b_aspp_2, b_aspp_3, b_image_pooling])
 
     return output_layer
 
 
 if __name__ == '__main__':
-    model = create_network(input_resolution=(416, 416, 3), n_classes=34)
+    model = create_network(input_resolution=(None, None), n_classes=20)
     model.summary()
+

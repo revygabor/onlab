@@ -21,8 +21,7 @@ if __name__ == '__main__':
     images_list = glob.glob(images_path)
     images_list.sort()
 
-
-    model =  create_inference_model('model.h5')
+    model = create_inference_model('model.h5')
 
     progress = progressbar.ProgressBar(widgets=[progressbar.Bar('=', '[', ']'), ' ',
                                                 progressbar.Percentage(), ' ',
@@ -30,7 +29,7 @@ if __name__ == '__main__':
 
     cm = plt.get_cmap('gist_ncar')
     for i in progress(range(len(images_list))):
-        x = cv2.resize(cv2.imread(images_list[i]), dsize=image_size)/255.
+        x = cv2.resize(cv2.imread(images_list[i]), dsize=image_size) / 255.
         y_pred = model.predict(x[None, ...])[0]
 
         plt.axis('off')

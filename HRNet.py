@@ -8,6 +8,7 @@ from keras.utils.vis_utils import model_to_dot
 
 BN = partial(BatchNormalization, momentum=0.01, epsilon=1e-05)
 Conv2D = partial(Conv2D, use_bias=False, padding='same')
+UpSampling2D = partial(UpSampling2D, interpolation='bilinear')
 
 
 def tensor_out_channels(x: tf.Tensor) -> int:
@@ -202,14 +203,13 @@ def create_classificator(input_layers: List[tf.Tensor], n_classes: int):
     x = BN()(x)
     x = ReLU()(x)
     x = Conv2D(filters=n_classes, kernel_size=1)(x)
-    x = Softmax()(x)
 
     return x
 
 
 def create_network(input_resolution=(None, None, 3), n_classes=34):
-    # input = Input(shape=(*input_resolution, 3))
-    input = Input(shape=(None, None, 3))
+    input = Input(shape=(*input_resolution, 3))
+    # input = Input(shape=(None, None, 3))
 
     x = Conv2D(filters=64, kernel_size=3, strides=2)(input)
     x = BN()(x)
@@ -233,8 +233,10 @@ def create_network(input_resolution=(None, None, 3), n_classes=34):
     stage4 = fuse_layers(stage4)
 
     classificator = create_classificator(stage4, n_classes)
+    x = UpSampling2D(size=4)(classificator)
+    output = Softmax()(x)
 
-    model = Model(inputs=input, outputs=classificator)
+    model = Model(inputs=input, outputs=output)
     return model
 
 
@@ -243,7 +245,7 @@ if __name__ == '__main__':
     config.gpu_options.allow_growth = True
     session = tf.Session(config=config)
 
-    model = create_network(input_resolution=(416,416,3), n_classes=34)
+    model = create_network(input_resolution=(None, None), n_classes=20)
     model.summary()
 
     # import os
@@ -252,4 +254,4 @@ if __name__ == '__main__':
     # print('\n\n\n')
     # print(os.environ['PATH'])
 
-    model_to_dot(model, show_shapes=True).write_svg('model.svg')
+    # model_to_dot(model, show_shapes=True).write_svg('model.svg')

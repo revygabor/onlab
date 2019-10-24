@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 from keras.models import load_model, Model
 
 from data_generator import DataSet, one_hot_tensor_to_label, show_grid_images, labels_to_images
+from config import CITYSCAPES_VAL_IMAGES, CITYSCAPES_VAL_FINE_LABELS
 
 
 def create_inference_model(name):
@@ -87,14 +88,15 @@ def plot_confusion_matrix(conf_mtx, classes,
 
 class PlotOnEpochEnd(Callback):
 
-    def __init__(self, save_images: bool=True):
-        val_images_dir = os.path.join("leftImg8bit", "val")
-        val_labels_dir = os.path.join("gtFine", "val")
+    def __init__(self, save_images: bool = True):
+        val_images_dir = CITYSCAPES_VAL_IMAGES
+        val_labels_dir = CITYSCAPES_VAL_FINE_LABELS
 
-        self.n_classes = 34
+        self.n_classes = 20
         self.image_size = (640, 320)
 
-        val_dataset = DataSet(batch_size=3, images_dir=val_images_dir, labels_dir=val_labels_dir, n_classes=self.n_classes)
+        val_dataset = DataSet(batch_size=3, images_path=val_images_dir, labels_path=val_labels_dir,
+                              n_classes=self.n_classes)
         val_generator = val_dataset.generate_data(image_size=self.image_size, shuffle=True)
 
         self.x, y = next(val_generator)
@@ -115,4 +117,4 @@ class PlotOnEpochEnd(Callback):
 
         fig = show_grid_images([self.x, self.y_image, labels_to_images(self.x, res_resized, self.n_classes)])
         if self.save_images:
-            fig.savefig(self.images_folder+str(epoch)+'.png', bbox_inches='tight', pad_inches=0)
+            fig.savefig(self.images_folder + str(epoch) + '.png', bbox_inches='tight', pad_inches=0)

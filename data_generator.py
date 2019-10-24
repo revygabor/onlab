@@ -4,6 +4,7 @@ import random
 from typing import List, Tuple
 
 import cv2
+from PIL import Image
 from matplotlib import pyplot as plt
 import numpy as np
 from keras.preprocessing import utils as keras_utils
@@ -47,31 +48,29 @@ def show_grid_images(images: List[List[np.ndarray]]):
         for j in range(n_cols):
             axes[i, j].imshow(images[j][i])
     fig = plt.gcf()
-    plt.show()
+    # plt.show()
     return fig
 
 
 class DataSet:
-    def __init__(self, images_dir: str, labels_dir: str, n_classes: int, batch_size: int):
+    def __init__(self, images_path: str, labels_path: str, n_classes: int, batch_size: int):
         """
         Initialize the DataSet class
         ----------------------------
-        :param images_dir: dir path to the images e.g. "leftImg8bit/train"; use os.path.join
-        :param labels_dir: dir path to the labels e.g. "gtCoarse/train"; use os.path.join
+        :param images_path: dir path to the images e.g. "leftImg8bit/train"; use os.path.join
+        :param labels_path: dir path to the labels e.g. "gtCoarse/train"; use os.path.join
         :param n_classes: number of classes in the dataset
         :param batch_size: batch size
         """
         self.cache = {}
-        self.images_dir = images_dir
-        self.labels_dir = labels_dir
+        self.images_dir = images_path
+        self.labels_dir = labels_path
         self.n_classes = n_classes
 
-        images_path = os.path.join(self.images_dir, "*", "*_leftImg8bit.png")
         images_list = glob.glob(images_path)
         images_list.sort()
         self.images_list = images_list
 
-        labels_path = os.path.join(self.labels_dir, "*", "*_labelIds.png")
         labels_list = glob.glob(labels_path)
         labels_list.sort()
         self.labels_list = labels_list
@@ -111,11 +110,11 @@ class DataSet:
                         if img_path in self.cache:
                             images_batch.append(self.cache[img_path])
                         else:
-                            img = cv2.resize(plt.imread(img_path), image_size)
+                            img = cv2.resize(np.asarray(Image.open(img_path))/255., image_size)
                             self.cache[img_path] = img
                             images_batch.append(img)
                 else:
-                    images_batch = [cv2.resize(plt.imread(img_path), image_size)
+                    images_batch = [cv2.resize(np.asarray(Image.open(img_path))/255., image_size)
                                     for img_path in images_batch_path]
 
                 labels_batch_path = self.labels_list[start_index: start_index + self.batch_size]
@@ -152,31 +151,38 @@ class DataSet:
         """
         indices = random.sample(range(self.data_size), n_samples)
 
-        images = [plt.imread(self.images_list[i]) for i in indices]
+        images = [np.asarray(Image.open(self.images_list[i]))/255. for i in indices]
         labels = [plt.imread(self.labels_list[i]) * 255. for i in indices]
 
         show_grid_images([images, labels_to_images(images, labels, self.n_classes)])
 
 
 if __name__ == '__main__':
-    labels_dir = os.path.join("gtCoarse", "train")
-    images_dir = os.path.join("leftImg8bit", "train")
-    n_classes = 34
+    # images_path = os.path.join("leftImg8bit", "train", "*", "*_leftImg8bit.png")
+    # labels_path = os.path.join("converted", "gtCoarse", "train", "*", "*_labelIds.png")
+    labels_path = os.path.join("converted", "bdd100k", "seg", "labels", "train", "*.png")
+    images_path = os.path.join("bdd100k", "seg", "images", "train", "*.jpg")
+    n_classes = 20
 
-    dataset = DataSet(images_dir=images_dir, labels_dir=labels_dir, n_classes=n_classes, batch_size=3)
-    train_generator = dataset.generate_data(image_size=(640, 320), shuffle=True, enable_caching=True)
-    #
-    # dataset.show_random_samples(2)
-    #
-    # x, y = next(train_generator)
-    # labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
-    # show_grid_images([x, labeled_image])
-    # print(x.shape, x[0])
-    # # print(y.shape, y[0])
-    import time
-    start = time.time()
-    for i in range(1500):
+    dataset = DataSet(images_path=images_path, labels_path=labels_path, n_classes=n_classes, batch_size=3)
+    train_generator = dataset.generate_data(image_size=(640, 320), shuffle=True, enable_caching=False)
+
+    dataset.show_random_samples(2)
+
+    x, y = next(train_generator)
+    labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
+    show_grid_images([x, labeled_image])
+    print(x.shape, x[0])
+    # print(y.shape, y[0])
+
+
+    for i in range(10):
         next(train_generator)
-        end = time.time()
-        print(end-start, i, sep='\t')
-        start = end
+
+    # import time
+    # start = time.time()
+    # for i in range(1500):
+    #     next(train_generator)
+    #     end = time.time()
+    #     print(end-start, i, sep='\t')
+    #     start = end
