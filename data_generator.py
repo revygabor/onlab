@@ -99,49 +99,47 @@ class DataSet:
                 self.images_list = [self.images_list[i] for i in shuffle_indices]
                 self.labels_list = [self.labels_list[i] for i in shuffle_indices]
 
-            for batch_index in range(self.n_batches):
-                start_index = batch_index * self.batch_size
+                images_batch = []
+                labels_batch = []
 
-                images_batch_path = self.images_list[start_index: start_index + self.batch_size]
+            for img_path, label_path in zip(self.images_list, self.labels_list):
 
-                if enable_caching:
+                # --- images  ---
+
+                if img_path in self.cache:
+                    img = self.cache[img_path]
+                else:
+                    img = cv2.resize(np.asarray(Image.open(img_path)) / 255., image_size)
+                    if enable_caching:
+                        self.cache[img_path] = img
+
+                images_batch.append(img)
+
+                # --- labels ---
+
+                if label_path in self.cache:
+                    label = self.cache[label_path]
+                else:
+                    label = cv2.resize((plt.imread(label_path) * 255).astype(int), # by multiplying by 255 we get the id
+
+                                       image_size, interpolation=cv2.INTER_NEAREST)
+                    if enable_caching:
+                        self.cache[label_path] = label
+
+                labels_batch.append(label)
+
+                # --- yield batch ---
+
+                if len(images_batch) == self.batch_size:
+                    labels_tensor_batch = [keras_utils.to_categorical(label, self.n_classes) for label in labels_batch]
+
+                    images_batch = np.array(images_batch)
+                    labels_tensor_batch = np.array(labels_tensor_batch)
+
+                    yield images_batch, labels_tensor_batch
+
                     images_batch = []
-                    for img_path in images_batch_path:
-                        if img_path in self.cache:
-                            images_batch.append(self.cache[img_path])
-                        else:
-                            img = cv2.resize(np.asarray(Image.open(img_path))/255., image_size)
-                            self.cache[img_path] = img
-                            images_batch.append(img)
-                else:
-                    images_batch = [cv2.resize(np.asarray(Image.open(img_path))/255., image_size)
-                                    for img_path in images_batch_path]
-
-                labels_batch_path = self.labels_list[start_index: start_index + self.batch_size]
-
-                if enable_caching:
                     labels_batch = []
-                    for label_path in labels_batch_path:
-                        if label_path in self.cache:
-                            labels_batch.append(self.cache[label_path])
-                        else:
-                            label = cv2.resize((plt.imread(label_path) * 255).astype(int),
-                                               image_size, interpolation=cv2.INTER_NEAREST)
-                            self.cache[label_path] = label
-                            labels_batch.append(label)
-                    # by multiplying by 255 we get the id
-
-                else:
-                    labels_batch = [cv2.resize(
-                        (plt.imread(img) * 255).astype(int), image_size, interpolation=cv2.INTER_NEAREST)
-                        for img in labels_batch_path]
-
-                labels_tensor_batch = [keras_utils.to_categorical(label, self.n_classes) for label in labels_batch]
-
-                images_batch = np.array(images_batch)
-                labels_tensor_batch = np.array(labels_tensor_batch)
-
-                yield images_batch, labels_tensor_batch
 
     def show_random_samples(self, n_samples: int):
         """
@@ -151,7 +149,7 @@ class DataSet:
         """
         indices = random.sample(range(self.data_size), n_samples)
 
-        images = [np.asarray(Image.open(self.images_list[i]))/255. for i in indices]
+        images = [np.asarray(Image.open(self.images_list[i])) / 255. for i in indices]
         labels = [plt.imread(self.labels_list[i]) * 255. for i in indices]
 
         show_grid_images([images, labels_to_images(images, labels, self.n_classes)])
@@ -160,29 +158,31 @@ class DataSet:
 if __name__ == '__main__':
     # images_path = os.path.join("leftImg8bit", "train", "*", "*_leftImg8bit.png")
     # labels_path = os.path.join("converted", "gtCoarse", "train", "*", "*_labelIds.png")
-    labels_path = os.path.join("converted", "bdd100k", "seg", "labels", "train", "*.png")
-    images_path = os.path.join("bdd100k", "seg", "images", "train", "*.jpg")
-    n_classes = 20
+
+    from config import *
+
+    labels_path = CITYSCAPES_TRAIN_FINE_LABELS
+    images_path = CITYSCAPES_TRAIN_IMAGES
+    n_classes = 16
 
     dataset = DataSet(images_path=images_path, labels_path=labels_path, n_classes=n_classes, batch_size=3)
-    train_generator = dataset.generate_data(image_size=(640, 320), shuffle=True, enable_caching=False)
+    train_generator = dataset.generate_data(image_size=(640, 320), shuffle=True, enable_caching=True)
 
-    dataset.show_random_samples(2)
-
+    # dataset.show_random_samples(2)
+    #
     x, y = next(train_generator)
-    labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
-    show_grid_images([x, labeled_image])
+    # labeled_image = labels_to_images(x, one_hot_tensor_to_label(y), n_classes)
+    # show_grid_images([x, labeled_image])
     print(x.shape, x[0])
-    # print(y.shape, y[0])
-
-
-    for i in range(10):
-        next(train_generator)
+    print(y.shape, y[0])
 
     # import time
-    # start = time.time()
-    # for i in range(1500):
-    #     next(train_generator)
-    #     end = time.time()
-    #     print(end-start, i, sep='\t')
-    #     start = end
+    #
+    # for _ in range(3):
+    #     epoch_start = time.time()
+    #
+    #     for i in range(dataset.n_batches):
+    #         next(train_generator)
+    #
+    #     epoch_end = time.time()
+    #     print('epoch time: {}'.format(epoch_end - epoch_start))
