@@ -1,9 +1,9 @@
-from keras.models import Model
-from keras.layers import Input, add, Lambda, Concatenate, UpSampling2D
-from keras.layers import Conv2D, SeparableConv2D, GlobalAveragePooling2D
-from keras.layers import BatchNormalization, ReLU, Dropout, Activation
 import tensorflow as tf
-import keras.backend as K
+from tensorflow.python.keras.models import Model
+from tensorflow.python.keras.layers import Input, add, Lambda, Concatenate, UpSampling2D
+from tensorflow.python.keras.layers import Conv2D, SeparableConv2D, GlobalAveragePooling2D
+from tensorflow.python.keras.layers import BatchNormalization, ReLU, Dropout, Activation
+import tensorflow.keras.backend as K
 
 
 def create_network(input_resolution, n_classes=34):
@@ -204,6 +204,12 @@ def atrous_spatial_pyramid_pooling(input_layer, global_image_pooling_upsampling_
 
 
 if __name__ == '__main__':
-    model = create_network(input_resolution=(None, None), n_classes=20)
+    model = create_network(input_resolution=(640,320), n_classes=16)
     model.summary()
 
+    for l in model.layers:
+        print('{} - {}'.format(l.name, l.output_shape))
+
+    from keras.utils import plot_model
+
+    plot_model(model, show_shapes=True, to_file='model.png')
