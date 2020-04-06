@@ -87,10 +87,10 @@ if __name__ == '__main__':
                                  labels_file_pattern=val_labels_dir,
                                  n_classes=n_classes, batch_size=10, size=image_size)
 
-    model = create_network(input_resolution=image_size, n_classes=n_classes)
+    model = create_network(input_resolution=image_size, n_classes=n_classes, weights=None)
     model.compile(optimizer=optimizer, loss=loss, metrics=['acc', 'categorical_accuracy'])
-    for l in model.layers[:-3]:
-        l.trainable = False
+    # for l in model.layers[:-3]:
+    #     l.trainable = False
 
     if LOAD_MODEL_WEIGHTS:
         model.load_weights('models/model.h5')
