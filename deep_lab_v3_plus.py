@@ -25,7 +25,7 @@ import tensorflow as tf
 
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras import layers
-from tensorflow.python.keras.layers import Input
+from tensorflow.python.keras.layers import Input, TimeDistributed
 from tensorflow.python.keras.layers import Lambda
 from tensorflow.python.keras.layers import Activation
 from tensorflow.python.keras.layers import Concatenate
@@ -42,6 +42,8 @@ from tensorflow.python.keras.utils.layer_utils import get_source_inputs
 from tensorflow.python.keras.utils.data_utils import get_file
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
+
+from utils import config_gpu
 
 WEIGHTS_PATH_X = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_xception_tf_dim_ordering_tf_kernels.h5"
 WEIGHTS_PATH_MOBILE = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5"
@@ -70,18 +72,18 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
         pad_total = kernel_size_effective - 1
         pad_beg = pad_total // 2
         pad_end = pad_total - pad_beg
-        x = ZeroPadding2D((pad_beg, pad_end))(x)
+        x = TimeDistributed(ZeroPadding2D((pad_beg, pad_end)))(x)
         depth_padding = 'valid'
 
     if not depth_activation:
         x = Activation(tf.nn.relu)(x)
-    x = DepthwiseConv2D((kernel_size, kernel_size), strides=(stride, stride), dilation_rate=(rate, rate),
-                        padding=depth_padding, use_bias=False, name=prefix + '_depthwise')(x)
+    x = TimeDistributed(DepthwiseConv2D((kernel_size, kernel_size), strides=(stride, stride), dilation_rate=(rate, rate),
+                        padding=depth_padding, use_bias=False), name=prefix + '_depthwise')(x)
     x = BatchNormalization(name=prefix + '_depthwise_BN', epsilon=epsilon)(x)
     if depth_activation:
         x = Activation(tf.nn.relu)(x)
-    x = Conv2D(filters, (1, 1), padding='same',
-               use_bias=False, name=prefix + '_pointwise')(x)
+    x = TimeDistributed(Conv2D(filters, (1, 1), padding='same',
+               use_bias=False), name=prefix + '_pointwise')(x)
     x = BatchNormalization(name=prefix + '_pointwise_BN', epsilon=epsilon)(x)
     if depth_activation:
         x = Activation(tf.nn.relu)(x)
@@ -101,23 +103,23 @@ def _conv2d_same(x, filters, prefix, stride=1, kernel_size=3, rate=1):
             rate: atrous rate for depthwise convolution
     """
     if stride == 1:
-        return Conv2D(filters,
+        return TimeDistributed(Conv2D(filters,
                       (kernel_size, kernel_size),
                       strides=(stride, stride),
                       padding='same', use_bias=False,
-                      dilation_rate=(rate, rate),
+                      dilation_rate=(rate, rate)),
                       name=prefix)(x)
     else:
         kernel_size_effective = kernel_size + (kernel_size - 1) * (rate - 1)
         pad_total = kernel_size_effective - 1
         pad_beg = pad_total // 2
         pad_end = pad_total - pad_beg
-        x = ZeroPadding2D((pad_beg, pad_end))(x)
-        return Conv2D(filters,
+        x = TimeDistributed(ZeroPadding2D((pad_beg, pad_end)))(x)
+        return TimeDistributed(Conv2D(filters,
                       (kernel_size, kernel_size),
                       strides=(stride, stride),
                       padding='valid', use_bias=False,
-                      dilation_rate=(rate, rate),
+                      dilation_rate=(rate, rate)),
                       name=prefix)(x)
 
 
@@ -212,7 +214,8 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
     return x
 
 
-def create_network(frames, weights='cityscapes', input_tensor=None, input_image_resolution=(512, 512), n_classes=21, backbone='xception',
+def create_network(frames, batch_size, weights='cityscapes', input_tensor=None, input_image_resolution=(512, 512), n_classes=21,
+                   backbone='xception',
                    OS=16, alpha=1., activation='softmax'):
     """ Instantiates the Deeplabv3+ architecture
 
@@ -252,8 +255,8 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
 
     """
 
-
-    input_resolution = (*input_image_resolution, 3) #  TODO
+    input_resolution = (*input_image_resolution, 3)
+    input_shape = (frames, *input_resolution)
 
     if not (weights in {'pascal_voc', 'cityscapes', None}):
         raise ValueError('The `weights` argument should be either '
@@ -265,9 +268,9 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
                          '`xception`  or `mobilenetv2` ')
 
     if input_tensor is None:
-        img_input = Input(shape=input_resolution, batch_size=1)
-    # else:
-    #     img_input = input_tensor
+        img_input = Input(shape=input_shape, batch_size=batch_size)
+    else:
+        img_input = input_tensor
 
     if backbone == 'xception':
         if OS == 8:
@@ -281,8 +284,8 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
             exit_block_rates = (1, 2)
             atrous_rates = (6, 12, 18)
 
-        x = Conv2D(32, (3, 3), strides=(2, 2),
-                   name='entry_flow_conv1_1', use_bias=False, padding='same')(img_input)
+        x = TimeDistributed(Conv2D(32, (3, 3), strides=(2, 2),
+                   use_bias=False, padding='same'), name='entry_flow_conv1_1')(img_input)
         x = BatchNormalization(name='entry_flow_conv1_1_BN')(x)
         x = Activation(tf.nn.relu)(x)
 
@@ -371,20 +374,20 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
 
     # Image Feature branch
     shape_before = tf.shape(x)
-    b4 = GlobalAveragePooling2D()(x)
+    b4 = TimeDistributed(GlobalAveragePooling2D())(x)
     # from (b_size, channels)->(b_size, 1, 1, channels)
-    b4 = Lambda(lambda x: K.expand_dims(x, 1))(b4)
-    b4 = Lambda(lambda x: K.expand_dims(x, 1))(b4)
-    b4 = Conv2D(256, (1, 1), padding='same',
-                use_bias=False, name='image_pooling')(b4)
+    b4 = TimeDistributed(Lambda(lambda x: K.expand_dims(x, 1)))(b4)
+    b4 = TimeDistributed(Lambda(lambda x: K.expand_dims(x, 1)))(b4)
+    b4 = TimeDistributed(Conv2D(256, (1, 1), padding='same',
+                use_bias=False), name='image_pooling')(b4)
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation(tf.nn.relu)(b4)
     # upsample. have to use compat because of the option align_corners
     size_before = tf.keras.backend.int_shape(x)
-    b4 = Lambda(lambda x: tf.compat.v1.image.resize(x, size_before[1:3],
-                                                    method='bilinear', align_corners=True))(b4)
+    b4 = TimeDistributed(Lambda(lambda x: tf.compat.v1.image.resize(x, size_before[-3:-1],
+                                                    method='bilinear', align_corners=True)))(b4)
     # simple 1x1
-    b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
+    b0 = TimeDistributed(Conv2D(256, (1, 1), padding='same', use_bias=False), name='aspp0')(x)
     b0 = BatchNormalization(name='aspp0_BN', epsilon=1e-5)(b0)
     b0 = Activation(tf.nn.relu, name='aspp0_activation')(b0)
 
@@ -405,8 +408,8 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
     else:
         x = Concatenate()([b4, b0])
 
-    x = Conv2D(256, (1, 1), padding='same',
-               use_bias=False, name='concat_projection')(x)
+    x = TimeDistributed(Conv2D(256, (1, 1), padding='same',
+               use_bias=False), name='concat_projection')(x)
     x = BatchNormalization(name='concat_projection_BN', epsilon=1e-5)(x)
     x = Activation(tf.nn.relu)(x)
     x = Dropout(0.1)(x)
@@ -416,12 +419,12 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
         # Feature projection
         # x4 (x2) block
         size_before2 = tf.keras.backend.int_shape(x)
-        x = Lambda(lambda xx: tf.compat.v1.image.resize(xx,
-                                                        skip1.shape[1:3],
-                                                        method='bilinear', align_corners=True))(x)
+        x = TimeDistributed(Lambda(lambda xx: tf.compat.v1.image.resize(xx,
+                                                        skip1.shape[-3:-1],
+                                                        method='bilinear', align_corners=True)))(x)
 
-        dec_skip1 = Conv2D(48, (1, 1), padding='same',
-                           use_bias=False, name='feature_projection0')(skip1)
+        dec_skip1 = TimeDistributed(Conv2D(48, (1, 1), padding='same',
+                           use_bias=False), name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
             name='feature_projection0_BN', epsilon=1e-5)(dec_skip1)
         dec_skip1 = Activation(tf.nn.relu)(dec_skip1)
@@ -429,11 +432,10 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
 
         # customization start
 
-        x = Reshape(target_shape=(1, *(x.get_shape()[1:])))(x)
-        x = ConvLSTM2D(256, kernel_size=3, padding='same', stateful=True, name='ConvLSTM2D', return_sequences=True)(x)
+        n_filters = x.shape[-1]
+        x = ConvLSTM2D(n_filters, kernel_size=3, padding='same', stateful=True, name='ConvLSTM2D', return_sequences=True)(x)
         x = BatchNormalization(epsilon=1e-5, name='ConvLSTM2D_BN')(x)
         x = Activation(tf.nn.relu, name='ConvLSTM2D_ReLU')(x)
-        x = Reshape(target_shape=x.get_shape()[2:])(x)
 
         # customization end
 
@@ -448,11 +450,11 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
     else:
         last_layer_name = 'custom_logits_semantic'
 
-    x = Conv2D(n_classes, (1, 1), padding='same', name=last_layer_name)(x)
+    x = TimeDistributed(Conv2D(n_classes, (1, 1), padding='same'), name=last_layer_name)(x)
     size_before3 = tf.keras.backend.int_shape(img_input)
-    x = Lambda(lambda xx: tf.compat.v1.image.resize(xx,
-                                                    size_before3[1:3],
-                                                    method='bilinear', align_corners=True))(x)
+    x = TimeDistributed(Lambda(lambda xx: tf.compat.v1.image.resize(xx,
+                                                    size_before3[-3:-1],
+                                                    method='bilinear', align_corners=True)))(x)
 
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
@@ -489,6 +491,7 @@ def create_network(frames, weights='cityscapes', input_tensor=None, input_image_
                                     cache_subdir='models')
         model.load_weights(weights_path, by_name=True)
     return model
+
 
 def preprocess_input(x):
     """Preprocesses a numpy array encoding a batch of images.
